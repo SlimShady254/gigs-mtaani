@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthPage } from "./pages/AuthPage";
+import { ChatPage } from "./pages/ChatPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { useAuthStore } from "./state/authStore";
 import "./styles-premium.css";
@@ -24,6 +25,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <ChatPage />
           </ProtectedRoute>
         }
       />

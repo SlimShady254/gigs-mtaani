@@ -565,6 +565,38 @@ h6 { font-size: 1rem; font-weight: 500; }
   gap: 1rem;
 }
 
+.layout-nav-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.layout-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bg-quaternary);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all var(--transition-base);
+}
+
+.layout-nav-link:hover {
+  border-color: var(--primary-500);
+  color: var(--text-primary);
+}
+
+.layout-nav-link.active {
+  background: color-mix(in srgb, var(--primary-500) 18%, transparent);
+  border-color: color-mix(in srgb, var(--primary-500) 40%, transparent);
+  color: var(--text-primary);
+}
+
 .layout-theme-control {
   display: inline-flex;
   align-items: center;
@@ -661,6 +693,10 @@ h6 { font-size: 1rem; font-weight: 500; }
   .nav-actions {
     justify-content: space-between;
     flex-wrap: wrap;
+  }
+
+  .layout-nav-links {
+    width: 100%;
   }
 
   .nav-user {
@@ -877,6 +913,11 @@ h6 { font-size: 1rem; font-weight: 500; }
 .dashboard-status-banner.is-warning {
   background: color-mix(in srgb, var(--warning-500) 12%, transparent);
   border-color: color-mix(in srgb, var(--warning-500) 35%, transparent);
+}
+
+.dashboard-status-banner.is-error {
+  background: color-mix(in srgb, var(--danger-500) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger-500) 35%, transparent);
 }
 
 .dashboard-main-layout {
@@ -1521,6 +1562,9 @@ h6 { font-size: 1rem; font-weight: 500; }
 }
 
 .threads .thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
   padding: 0.75rem 1rem;
   background: transparent;
   border: none;
@@ -1538,6 +1582,44 @@ h6 { font-size: 1rem; font-weight: 500; }
 .threads .thread.active {
   background: rgba(20, 184, 166, 0.1);
   color: var(--primary-400);
+}
+
+.thread-title {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: inherit;
+}
+
+.thread-preview-line {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-time-chip {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.chat-empty-threads {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chat-active-thread-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.76rem;
+  color: var(--text-tertiary);
+  margin-bottom: 0.45rem;
 }
 
 .messages {
@@ -1601,6 +1683,9 @@ h6 { font-size: 1rem; font-weight: 500; }
 }
 
 .send-box button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.75rem 1.25rem;
   background: var(--gradient-primary);
   border: none;

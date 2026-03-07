@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
-import { BriefcaseBusiness, LogOut, Palette } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { BriefcaseBusiness, Home, LogOut, MessageSquare, Palette } from "lucide-react";
 import { useAuthStore } from "../state/authStore";
 import { THEME_OPTIONS, type ThemeName, useThemeStore } from "../state/themeStore";
 
@@ -33,6 +34,27 @@ export function AppLayout({ children, title = "Gigs Mtaani" }: LayoutProps) {
           </div>
 
           <div className="nav-actions">
+            <div className="layout-nav-links">
+              <NavLink
+                to="/app"
+                className={({ isActive }) =>
+                  isActive ? "layout-nav-link active" : "layout-nav-link"
+                }
+              >
+                <Home size={14} />
+                Dashboard
+              </NavLink>
+              <NavLink
+                to="/chat"
+                className={({ isActive }) =>
+                  isActive ? "layout-nav-link active" : "layout-nav-link"
+                }
+              >
+                <MessageSquare size={14} />
+                Chats
+              </NavLink>
+            </div>
+
             <label className="layout-theme-control">
               <Palette size={14} />
               <select

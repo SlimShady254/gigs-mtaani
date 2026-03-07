@@ -92,6 +92,13 @@ export const chatMessageSchema = z.object({
   senderKeyId: z.string().min(1).max(500)
 });
 
+export const createThreadSchema = z.object({
+  gigId: z.string().trim().min(1).max(120).optional(),
+  gigTitle: z.string().trim().min(1).max(180).optional(),
+  participantId: z.string().trim().min(1).max(120).optional(),
+  participantName: z.string().trim().min(1).max(120).optional()
+});
+
 export const topupSchema = z.object({
   amount: z.coerce.number().positive(),
   currency: z.string().trim().min(3).max(8).default("KES")

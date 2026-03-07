@@ -13,6 +13,7 @@ export type GigCardProps = {
     latitude?: number;
     longitude?: number;
     poster?: {
+      id?: string;
       profile?: {
         displayName?: string;
         avatarUrl?: string;
@@ -26,7 +27,7 @@ export type GigCardProps = {
     tags?: string[];
   };
   onApply: (gigId: string) => void;
-  onMessage?: (gigId: string) => void;
+  onMessage?: (gig: GigCardProps["gig"]) => void;
 };
 
 // Mock images for different categories
@@ -152,7 +153,7 @@ export function GigCard({ gig, onApply, onMessage }: GigCardProps) {
           <div className="gig-actions">
             <button 
               className="btn btn-secondary btn-sm"
-              onClick={() => onMessage?.(gig.id)}
+              onClick={() => onMessage?.(gig)}
               disabled={!onMessage}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -172,4 +173,3 @@ export function GigCard({ gig, onApply, onMessage }: GigCardProps) {
     </article>
   );
 }
-

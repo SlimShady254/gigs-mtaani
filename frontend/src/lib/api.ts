@@ -1,7 +1,9 @@
 import axios from "axios";
 import { getAuthSnapshot, useAuthStore, type SessionUser } from "../state/authStore";
 
-const baseURL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
+const baseURL =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? "http://localhost:4000/api/v1" : `${window.location.origin}/api/v1`);
 
 const api = axios.create({
   baseURL,
@@ -173,6 +175,35 @@ export const chatApi = {
   threads: async () => {
     const { data } = await api.get("/chat/threads");
     return data;
+  },
+  createThread: async (payload: {
+    gigId?: string;
+    gigTitle?: string;
+    participantId?: string;
+    participantName?: string;
+  }) => {
+    const { data } = await api.post("/chat/threads", payload);
+    return data as {
+      created: boolean;
+      thread: {
+        id: string;
+        gigId?: string | null;
+        gigTitle?: string | null;
+        participants?: Array<{
+          userId: string;
+          user?: {
+            id?: string;
+            profile?: { displayName?: string };
+          };
+        }>;
+        latestMessage?: {
+          id: string;
+          senderId?: string;
+          createdAt?: string;
+          preview?: string;
+        } | null;
+      };
+    };
   },
   messages: async (threadId: string) => {
     const { data } = await api.get(`/chat/threads/${threadId}/messages`);

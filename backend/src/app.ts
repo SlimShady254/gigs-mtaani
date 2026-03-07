@@ -10,7 +10,9 @@ import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import { config } from "./config.js";
 import {
+  chatMessageSchema,
   createGigSchema,
+  createThreadSchema,
   feedQuerySchema,
   forgotPasswordSchema,
   loginSchema,
@@ -112,6 +114,18 @@ type ChatMessageRecord = {
   senderKeyId: string;
   createdAt: string;
 };
+type ChatThreadParticipant = {
+  userId: string;
+  displayName: string;
+};
+type ChatThreadRecord = {
+  id: string;
+  gigId: string | null;
+  gigTitle: string | null;
+  participants: ChatThreadParticipant[];
+  createdAt: string;
+  updatedAt: string;
+};
 type WalletRecord = {
   id: string;
   currency: string;
@@ -129,6 +143,7 @@ const refreshTokens = new Map<string, RefreshTokenRecord>();
 const verificationTokens = new Map<string, OneTimeTokenRecord>();
 const resetTokens = new Map<string, OneTimeTokenRecord>();
 const walletsByUser = new Map<string, WalletRecord[]>();
+const threadsById = new Map<string, ChatThreadRecord>();
 const messagesByThread = new Map<string, ChatMessageRecord[]>();
 const requestStartTimes = new Map<string, number>();
 const gigs: GigRecord[] = [];
@@ -279,6 +294,128 @@ function seedGigsIfEmpty() {
     posterId: "seed-system",
     createdAt: new Date().toISOString()
   });
+}
+
+function decodeMessagePreview(ciphertext: string) {
+  try {
+    return Buffer.from(ciphertext, "base64").toString("utf8");
+  } catch {
+    return "[Encrypted message]";
+  }
+}
+
+function normalizeParticipantId(input: string | undefined | null) {
+  return String(input ?? "").trim();
+}
+
+function buildThreadResponse(thread: ChatThreadRecord) {
+  const messages = messagesByThread.get(thread.id) ?? [];
+  const latest = messages[messages.length - 1];
+  return {
+    id: thread.id,
+    gigId: thread.gigId,
+    gigTitle: thread.gigTitle,
+    participants: thread.participants.map((participant) => ({
+      userId: participant.userId,
+      user: {
+        id: participant.userId,
+        profile: {
+          displayName: participant.displayName
+        }
+      }
+    })),
+    latestMessage: latest
+      ? {
+          id: latest.id,
+          senderId: latest.senderId,
+          createdAt: latest.createdAt,
+          preview: decodeMessagePreview(latest.ciphertext).slice(0, 120)
+        }
+      : null,
+    updatedAt: thread.updatedAt,
+    createdAt: thread.createdAt
+  };
+}
+
+function canAccessThread(thread: ChatThreadRecord, userId: string) {
+  return thread.participants.some((participant) => participant.userId === userId);
+}
+
+function findExistingThread(params: {
+  currentUserId: string;
+  gigId?: string | null;
+  participantId?: string | null;
+}) {
+  const normalizedParticipantId = normalizeParticipantId(params.participantId);
+
+  for (const thread of threadsById.values()) {
+    if (!canAccessThread(thread, params.currentUserId)) continue;
+
+    const sameGig = params.gigId ? thread.gigId === params.gigId : true;
+    const sameParticipant = normalizedParticipantId
+      ? thread.participants.some((participant) => participant.userId === normalizedParticipantId)
+      : true;
+
+    if (sameGig && sameParticipant) return thread;
+  }
+
+  return null;
+}
+
+function createThreadRecord(params: {
+  currentUser: UserRecord;
+  gigId?: string | null;
+  gigTitle?: string | null;
+  participantId?: string | null;
+  participantName?: string | null;
+}) {
+  const now = new Date().toISOString();
+  const participants: ChatThreadParticipant[] = [
+    {
+      userId: params.currentUser.id,
+      displayName: params.currentUser.displayName
+    }
+  ];
+
+  const participantId = normalizeParticipantId(params.participantId);
+  if (participantId && participantId !== params.currentUser.id) {
+    const knownUser = usersById.get(participantId);
+    participants.push({
+      userId: participantId,
+      displayName:
+        params.participantName?.trim() ||
+        knownUser?.displayName ||
+        "Campus User"
+    });
+  }
+
+  const thread: ChatThreadRecord = {
+    id: randomUUID(),
+    gigId: params.gigId ?? null,
+    gigTitle: params.gigTitle?.trim() || null,
+    participants,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  threadsById.set(thread.id, thread);
+  return thread;
+}
+
+function findOrCreateThread(params: {
+  currentUser: UserRecord;
+  gigId?: string | null;
+  gigTitle?: string | null;
+  participantId?: string | null;
+  participantName?: string | null;
+}) {
+  const existing = findExistingThread({
+    currentUserId: params.currentUser.id,
+    gigId: params.gigId,
+    participantId: params.participantId
+  });
+  if (existing) return { thread: existing, created: false };
+  return { thread: createThreadRecord(params), created: true };
 }
 
 const isUserLockedOut = (u: UserRecord) => Boolean(u.lockoutUntilMs && u.lockoutUntilMs > Date.now());
@@ -669,9 +806,35 @@ export async function buildApp(): Promise<FastifyInstance> {
     return reply.code(201).send({ gig });
   });
 
-  app.post<{ Params: { id: string } }>("/api/v1/gigs/:id/apply", { preHandler: [authenticate] }, async (request) => {
-    await logActivitySafe(request, "GIG_APPLIED", request.user?.sub ?? null, { gigId: request.params.id });
-    return { success: true, gigId: request.params.id };
+  app.post<{ Params: { id: string } }>("/api/v1/gigs/:id/apply", { preHandler: [authenticate] }, async (request, reply) => {
+    const user = await getCurrentUser(request);
+    if (!user) return reply.unauthorized("Unauthorized");
+
+    const gig = gigs.find((item) => item.id === request.params.id);
+    if (!gig) return reply.notFound("Gig not found");
+
+    const posterName = usersById.get(gig.posterId)?.displayName ?? "Gig owner";
+    const shouldCreateThread = gig.posterId && gig.posterId !== user.id;
+    const threadResult = shouldCreateThread
+      ? findOrCreateThread({
+          currentUser: user,
+          gigId: gig.id,
+          gigTitle: gig.title,
+          participantId: gig.posterId,
+          participantName: posterName
+        })
+      : null;
+
+    await logActivitySafe(request, "GIG_APPLIED", request.user?.sub ?? null, {
+      gigId: request.params.id,
+      threadId: threadResult?.thread.id ?? null
+    });
+
+    return {
+      success: true,
+      gigId: request.params.id,
+      threadId: threadResult?.thread.id ?? null
+    };
   });
 
   app.get("/api/v1/gigs/mine/posted", { preHandler: [authenticate] }, async (request) => {
@@ -680,9 +843,71 @@ export async function buildApp(): Promise<FastifyInstance> {
     return { gigs: gigs.filter((gig) => gig.posterId === user.id) };
   });
 
-  app.get("/api/v1/chat/threads", { preHandler: [authenticate] }, async () => ({ threads: [] }));
+  app.post<{
+    Body: {
+      gigId?: string;
+      gigTitle?: string;
+      participantId?: string;
+      participantName?: string;
+    };
+  }>("/api/v1/chat/threads", { preHandler: [authenticate] }, async (request, reply) => {
+    const user = await getCurrentUser(request);
+    if (!user) return reply.unauthorized("Unauthorized");
 
-  app.get<{ Params: { threadId: string } }>("/api/v1/chat/threads/:threadId/messages", { preHandler: [authenticate] }, async (request) => ({ messages: messagesByThread.get(request.params.threadId) ?? [] }));
+    const parsed = createThreadSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.badRequest(parsed.error.issues[0]?.message ?? "Invalid thread payload");
+
+    const gig = parsed.data.gigId ? gigs.find((item) => item.id === parsed.data.gigId) : null;
+    const participantId =
+      gig?.posterId && gig.posterId !== user.id
+        ? gig.posterId
+        : parsed.data.participantId;
+    const participantName =
+      (participantId ? usersById.get(participantId)?.displayName : undefined) ??
+      parsed.data.participantName ??
+      (gig?.posterId && gig.posterId !== user.id ? "Gig owner" : "Conversation");
+
+    const result = findOrCreateThread({
+      currentUser: user,
+      gigId: parsed.data.gigId ?? gig?.id ?? null,
+      gigTitle: parsed.data.gigTitle ?? gig?.title ?? "Conversation",
+      participantId,
+      participantName
+    });
+
+    await logActivitySafe(request, result.created ? "CHAT_THREAD_CREATED" : "CHAT_THREAD_REUSED", user.id, {
+      threadId: result.thread.id,
+      gigId: result.thread.gigId
+    });
+
+    return {
+      created: result.created,
+      thread: buildThreadResponse(result.thread)
+    };
+  });
+
+  app.get("/api/v1/chat/threads", { preHandler: [authenticate] }, async (request, reply) => {
+    const user = await getCurrentUser(request);
+    if (!user) return reply.unauthorized("Unauthorized");
+
+    const threads = Array.from(threadsById.values())
+      .filter((thread) => canAccessThread(thread, user.id))
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .map((thread) => buildThreadResponse(thread));
+
+    return { threads };
+  });
+
+  app.get<{ Params: { threadId: string } }>("/api/v1/chat/threads/:threadId/messages", { preHandler: [authenticate] }, async (request, reply) => {
+    const user = await getCurrentUser(request);
+    if (!user) return reply.unauthorized("Unauthorized");
+
+    const thread = threadsById.get(request.params.threadId);
+    if (!thread) return reply.notFound("Thread not found");
+    if (!canAccessThread(thread, user.id)) return reply.forbidden("You do not have access to this thread");
+
+    return { messages: messagesByThread.get(request.params.threadId) ?? [] };
+  });
 
   app.post<{
     Params: { threadId: string };
@@ -691,25 +916,33 @@ export async function buildApp(): Promise<FastifyInstance> {
     const user = await getCurrentUser(request);
     if (!user) return reply.unauthorized("Unauthorized");
 
-    const { ciphertext, nonce, ratchetHeader, senderKeyId } = request.body ?? {};
-    if (!ciphertext || !nonce || !ratchetHeader || !senderKeyId) {
-      return reply.badRequest("ciphertext, nonce, ratchetHeader and senderKeyId are required");
-    }
+    const thread = threadsById.get(request.params.threadId);
+    if (!thread) return reply.notFound("Thread not found");
+    if (!canAccessThread(thread, user.id)) return reply.forbidden("You do not have access to this thread");
+
+    const parsed = chatMessageSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.badRequest(parsed.error.issues[0]?.message ?? "Invalid message payload");
 
     const message: ChatMessageRecord = {
       id: randomUUID(),
       threadId: request.params.threadId,
       senderId: user.id,
-      ciphertext,
-      nonce,
-      ratchetHeader,
-      senderKeyId,
+      ciphertext: parsed.data.ciphertext,
+      nonce: parsed.data.nonce,
+      ratchetHeader: parsed.data.ratchetHeader,
+      senderKeyId: parsed.data.senderKeyId,
       createdAt: new Date().toISOString()
     };
 
     const existing = messagesByThread.get(request.params.threadId) ?? [];
     existing.push(message);
     messagesByThread.set(request.params.threadId, existing);
+    thread.updatedAt = message.createdAt;
+
+    await logActivitySafe(request, "CHAT_MESSAGE_SENT", user.id, {
+      threadId: request.params.threadId,
+      messageId: message.id
+    });
 
     return reply.code(201).send({ message });
   });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
@@ -8,7 +8,9 @@ import {
   LayoutGrid,
   List,
   MapPin,
+  MessageSquare,
   Palette,
+  PlusCircle,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -20,7 +22,7 @@ import {
 } from "lucide-react";
 import { AppLayout } from "../components/Layout";
 import { AdminPanel } from "../components/AdminPanel";
-import { ChatPanel } from "../components/ChatPanel";
+import { ChatPanel, type ChatLaunchIntent } from "../components/ChatPanel";
 import { GigCard, type GigCardProps } from "../components/GigCard";
 import { NewGigForm } from "../components/NewGigForm";
 import { SafetyPanel } from "../components/SafetyPanel";
@@ -182,6 +184,7 @@ function normalizeGig(raw: any, userLat: number, userLon: number): GigCardModel 
     images: Array.isArray(raw?.images) ? raw.images : undefined,
     tags: Array.isArray(raw?.skills) ? raw.skills : undefined,
     poster: {
+      id: raw?.poster?.id ? String(raw.poster.id) : raw?.posterId ? String(raw.posterId) : undefined,
       profile: {
         displayName: posterName,
         avatarUrl: raw?.poster?.profile?.avatarUrl
@@ -192,6 +195,12 @@ function normalizeGig(raw: any, userLat: number, userLon: number): GigCardModel 
       }
     }
   };
+}
+
+function parseApiError(error: unknown, fallback: string) {
+  const data =
+    (error as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
+  return data?.error ?? data?.message ?? fallback;
 }
 
 export function DashboardPage() {
@@ -206,6 +215,9 @@ export function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [chatLaunchIntent, setChatLaunchIntent] = useState<ChatLaunchIntent | null>(null);
+  const chatPanelRef = useRef<HTMLDivElement | null>(null);
+  const createGigRef = useRef<HTMLDivElement | null>(null);
 
   const isAdmin = useMemo(() => {
     const role = String(user?.role ?? "").toUpperCase();
@@ -308,15 +320,30 @@ export function DashboardPage() {
 
   const applyMutation = useMutation({
     mutationFn: async (gigId: string) => {
-      try {
-        return await gigsApi.apply(gigId);
-      } catch {
-        return { success: true, gigId };
-      }
+      return gigsApi.apply(gigId);
     },
-    onSuccess: (_, gigId) => {
+    onSuccess: (result, gigId) => {
       setStatusMessage(`Application submitted for gig ${gigId}.`);
+      const threadId = String(result?.threadId ?? "");
+      if (threadId) {
+        const gig = gigs.find((item) => item.id === gigId);
+        if (gig) {
+          setChatLaunchIntent({
+            requestId: Date.now(),
+            gigId: gig.id,
+            gigTitle: gig.title,
+            posterId: gig.poster?.id,
+            posterName: gig.poster?.profile?.displayName
+          });
+          setTimeout(() => {
+            chatPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 50);
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["feed"] });
+    },
+    onError: (error) => {
+      setStatusMessage(parseApiError(error, "Could not apply for this gig right now."));
     }
   });
 
@@ -325,6 +352,9 @@ export function DashboardPage() {
     onSuccess: () => {
       setStatusMessage("Gig posted successfully.");
       queryClient.invalidateQueries({ queryKey: ["feed"] });
+    },
+    onError: (error) => {
+      setStatusMessage(parseApiError(error, "Gig posting failed. Please review your inputs."));
     }
   });
 
@@ -387,6 +417,22 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="dashboard-hero-actions">
+              <button
+                className="btn btn-primary btn-sm"
+                type="button"
+                onClick={() => createGigRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                <PlusCircle size={14} />
+                Add Gig
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                type="button"
+                onClick={() => chatPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              >
+                <MessageSquare size={14} />
+                Messages
+              </button>
               <label className="dashboard-theme-select">
                 <Palette size={16} />
                 <span>Theme</span>
@@ -599,8 +645,18 @@ export function DashboardPage() {
                     <GigCard
                       gig={gig}
                       onApply={(gigId) => applyMutation.mutate(gigId)}
-                      onMessage={(gigId) => {
-                        setStatusMessage(`Open the Secure Chat panel below to message about gig ${gigId}.`);
+                      onMessage={(selectedGig) => {
+                        setChatLaunchIntent({
+                          requestId: Date.now(),
+                          gigId: selectedGig.id,
+                          gigTitle: selectedGig.title,
+                          posterId: selectedGig.poster?.id,
+                          posterName: selectedGig.poster?.profile?.displayName
+                        });
+                        setStatusMessage(`Opening chat for ${selectedGig.title}.`);
+                        setTimeout(() => {
+                          chatPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }, 50);
                       }}
                     />
                   </motion.div>
@@ -610,11 +666,13 @@ export function DashboardPage() {
           </section>
 
           <aside className="dashboard-side-column">
-            <NewGigForm
-              latitude={geo.latitude}
-              longitude={geo.longitude}
-              onSubmit={async (payload) => createGigMutation.mutateAsync(payload)}
-            />
+            <div ref={createGigRef}>
+              <NewGigForm
+                latitude={geo.latitude}
+                longitude={geo.longitude}
+                onSubmit={async (payload) => createGigMutation.mutateAsync(payload)}
+              />
+            </div>
             <WalletPanel
               wallets={walletQuery.data?.wallets ?? FALLBACK_WALLETS}
               onTopUp={async (amount) => topupMutation.mutateAsync(amount)}
@@ -626,8 +684,12 @@ export function DashboardPage() {
           </aside>
         </div>
 
-        <div className="dashboard-bottom-grid">
-          <ChatPanel />
+        <div className="dashboard-bottom-grid" ref={chatPanelRef}>
+          <ChatPanel
+            launchIntent={chatLaunchIntent}
+            onLaunchHandled={() => setChatLaunchIntent(null)}
+            onStatusChange={(message) => setStatusMessage(message)}
+          />
           {isAdmin ? (
             <AdminPanel
               metrics={adminMetricsQuery.data}
