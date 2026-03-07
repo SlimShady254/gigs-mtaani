@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { useAuthStore } from "./state/authStore";
+import "./styles-premium.css";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { accessToken } = useAuthStore();

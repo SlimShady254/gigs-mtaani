@@ -94,6 +94,7 @@ export type RegisterInput = {
 export type LoginInput = {
   identifier: string;
   password: string;
+  rememberMe?: boolean;
   mfaCode?: string;
 };
 
@@ -107,9 +108,22 @@ export const authApi = {
     return data as {
       accessToken: string;
       refreshToken: string;
+      csrfToken?: string;
       expiresIn: number;
       user: SessionUser;
     };
+  },
+  verifyEmail: async (token: string) => {
+    const { data } = await api.post("/auth/verify-email", { token });
+    return data as { success: boolean; message: string };
+  },
+  forgotPassword: async (campusEmail: string) => {
+    const { data } = await api.post("/auth/password/forgot", { campusEmail });
+    return data as { success: boolean; message: string; resetToken?: string };
+  },
+  resetPassword: async (token: string, password: string) => {
+    const { data } = await api.post("/auth/password/reset", { token, password });
+    return data as { success: boolean; message: string };
   },
   me: async () => {
     const { data } = await api.get("/auth/me");
