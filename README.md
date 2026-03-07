@@ -85,36 +85,6 @@ cp .env.example .env
 
 Edit `.env` with your configuration:
 
-```env
-# Application Configuration
-NODE_ENV=development
-PORT=4000
-WEB_ORIGIN=http://localhost:3000
-
-# Supabase Configuration
-SUPABASE_URL=your_supabase_project_url_here
-SUPABASE_ANON_KEY=your_supabase_anon_key_here
-SUPABASE_SERVICE_KEY=your_supabase_service_key_here
-
-# JWT Configuration
-JWT_ACCESS_SECRET=replace_with_64_char_random_access_secret_change_me_now
-JWT_REFRESH_SECRET=replace_with_64_char_random_refresh_secret_change_me_now
-JWT_ISSUER=gigs-mtaani
-JWT_AUDIENCE=gigs-mtaani-clients
-ACCESS_TOKEN_TTL=10m
-REFRESH_TOKEN_TTL=30d
-
-# Security Configuration
-ARGON2_MEMORY_COST=65536
-ARGON2_TIME_COST=3
-ARGON2_PARALLELISM=1
-
-# Application Settings
-DEFAULT_RADIUS_METERS=5000
-MAX_RADIUS_METERS=50000
-RISK_REVIEW_THRESHOLD=65
-RISK_BLOCK_THRESHOLD=85
-WS_PATH=/ws
 
 # Redis Configuration (for caching and rate limiting)
 REDIS_URL=redis://localhost:6379
