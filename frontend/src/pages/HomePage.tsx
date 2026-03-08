@@ -871,6 +871,13 @@ export function HomePage() {
           margin-bottom: 1rem;
         }
 
+        .text-gradient {
+          background: var(--gradient-primary);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
         .section-title {
           font-size: clamp(1.75rem, 4vw, 2.5rem);
           font-weight: 800;
@@ -1211,6 +1218,48 @@ export function HomePage() {
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
+        }
+
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.5rem;
+          border-radius: var(--radius-lg);
+          font-family: inherit;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all var(--transition-base);
+          border: none;
+          text-decoration: none;
+        }
+
+        .btn-primary {
+          background: var(--gradient-primary);
+          color: white;
+        }
+
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-lg);
+        }
+
+        .btn-secondary {
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          border: 1px solid var(--bg-quaternary);
+        }
+
+        .btn-secondary:hover {
+          background: var(--bg-quaternary);
+          color: var(--text-primary);
+        }
+
+        .btn-lg {
+          padding: 1rem 2rem;
+          font-size: 1rem;
         }
 
         /* Footer */

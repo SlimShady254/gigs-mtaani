@@ -425,8 +425,8 @@ export function AboutPage() {
         }
 
         .landing-nav-link:hover {
-(--text-primary);
-          color: var          background: var(--bg-tertiary);
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
         }
 
         .landing-nav-link.active {
