@@ -826,7 +826,7 @@ export function DashboardPage() {
                 <div className="top-earner">
                   <span className="earner-rank gold">1</span>
                   <div className="earner-info">
-                    <span className="earner-name">Sarah M.</span>
+                    <span className="earner-name">Shady.</span>
                     <span className="earner-amount">KES 4,500</span>
                   </div>
                 </div>
