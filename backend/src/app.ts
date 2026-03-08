@@ -41,6 +41,11 @@ import {
   type PersistedUser,
   upsertUser
 } from "./lib/supabase.js";
+import {
+  sendConfirmationEmail,
+  sendPasswordResetEmail,
+  sendWelcomeEmail
+} from "./lib/email.js";
 
 type UserRole = "STUDENT" | "ADMIN";
 type UserStatus = "ACTIVE" | "PENDING_VERIFICATION" | "SUSPENDED" | "DELETED";
@@ -615,15 +620,26 @@ export async function buildApp(): Promise<FastifyInstance> {
     issueDefaultWallets(user.id);
     await logActivitySafe(request, "AUTH_REGISTERED", user.id, { channel: "password" });
 
-    const verificationToken = requiresVerification
-      ? createOneTimeToken(verificationTokens, user.id, config.EMAIL_VERIFICATION_TOKEN_TTL_HOURS * 60 * 60 * 1000)
-      : undefined;
+    // Generate verification token and send confirmation email
+    let verificationToken: string | undefined;
+    if (requiresVerification) {
+      verificationToken = createOneTimeToken(verificationTokens, user.id, config.EMAIL_VERIFICATION_TOKEN_TTL_HOURS * 60 * 60 * 1000);
+      
+      // Send actual confirmation email
+      const baseUrl = config.WEB_ORIGIN.split(",")[0];
+      const emailSent = await sendConfirmationEmail(user.campusEmail, verificationToken, baseUrl);
+      
+      request.log.info({ userId: user.id, email: redactPII(user.campusEmail), emailSent }, "auth.register.email_sent");
+    }
+
+    // In development, return the token for testing
+    const devToken = config.NODE_ENV !== "production" ? verificationToken : undefined;
 
     return reply.code(201).send({
       user: toSessionUser(user),
-      message: requiresVerification ? "Account created. Verify your email before login." : "Account created successfully.",
+      message: requiresVerification ? "Account created. Check your email to verify your account." : "Account created successfully.",
       requiresEmailVerification: requiresVerification,
-      verificationToken: config.NODE_ENV !== "production" ? verificationToken : undefined
+      verificationToken: devToken
     });
   });
 
@@ -643,7 +659,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     await persistUser(user, request);
     await logActivitySafe(request, "AUTH_EMAIL_VERIFIED", user.id);
 
-    return { success: true, message: "Email verification complete." };
+    // Send welcome email after successful verification
+    await sendWelcomeEmail(user.campusEmail, user.displayName);
+    request.log.info({ userId: user.id, email: redactPII(user.campusEmail) }, "auth.email_verified.welcome_sent");
+
+    return { success: true, message: "Email verification complete. Welcome to Gigs Mtaani!" };
   });
 
   app.post("/api/v1/auth/login", { config: { rateLimit: { max: config.AUTH_RATE_LIMIT_MAX, timeWindow: config.AUTH_RATE_LIMIT_WINDOW } } }, async (request, reply) => {
@@ -678,11 +698,17 @@ export async function buildApp(): Promise<FastifyInstance> {
     const user = await findUserByIdentifier(parsed.data.campusEmail, request);
     if (user) {
       const resetToken = createOneTimeToken(resetTokens, user.id, config.PASSWORD_RESET_TOKEN_TTL_MINUTES * 60 * 1000);
+      
+      // Send actual password reset email
+      const baseUrl = config.WEB_ORIGIN.split(",")[0];
+      await sendPasswordResetEmail(user.campusEmail, resetToken, baseUrl);
+      
       await logActivitySafe(request, "AUTH_PASSWORD_RESET_REQUESTED", user.id);
-      return { success: true, message: "If the account exists, reset instructions have been generated.", resetToken: config.NODE_ENV !== "production" ? resetToken : undefined };
+      request.log.info({ userId: user.id, email: redactPII(user.campusEmail) }, "auth.password_reset.email_sent");
     }
 
-    return { success: true, message: "If the account exists, reset instructions have been generated." };
+    // Always return success to prevent email enumeration
+    return { success: true, message: "If the account exists, password reset instructions have been sent to your email." };
   });
 
   app.post("/api/v1/auth/password/reset", { config: { rateLimit: { max: config.AUTH_RATE_LIMIT_MAX, timeWindow: config.AUTH_RATE_LIMIT_WINDOW } } }, async (request, reply) => {
