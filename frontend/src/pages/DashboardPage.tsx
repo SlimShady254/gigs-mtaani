@@ -530,20 +530,6 @@ export function DashboardPage() {
                 )}
               </div>
 
-              <label className="dashboard-theme-select">
-                <Palette size={16} />
-                <span>Theme</span>
-                <select
-                  value={theme}
-                  onChange={(event) => setTheme(event.target.value as ThemeName)}
-                >
-                  {THEME_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <button
                 className="btn btn-secondary btn-sm"
                 type="button"
